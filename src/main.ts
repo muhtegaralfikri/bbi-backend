@@ -23,6 +23,7 @@ async function bootstrap() {
   // Mengaktifkan CORS untuk frontend
   app.enableCors({
     origin: frontendOrigin,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
