@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // Diambil dari file .env
+}
+
+// 1. Tabel Admins
+model Admin {
+  id                  String    @id @default(uuid())
+  nama_lengkap        String
+  email               String    @unique
+  password_hash       String
+  reset_token         String? // ? berarti nullable
+  reset_token_expires DateTime?
+
+  // Relasi: Satu admin bisa menulis banyak berita
+  berita              Berita[]
+
+  created_at          DateTime  @default(now())
+
+  @@map("admins") // Nama tabel di database
+}
+
+// 2. Tabel Berita
+model Berita {
+  id               String   @id @default(uuid())
+  judul            String
+  slug             String   @unique
+  ringkasan        String   @db.Text
+  isi_konten       String   @db.Text // Simpan sebagai HTML atau Markdown
+  gambar_utama_url String
+  status           String   @default("draft") // "draft" atau "published"
+  published_at     DateTime?
+
+  // Relasi: Satu berita ditulis oleh satu admin
+  penulis    Admin  @relation(fields: [penulis_id], references: [id])
+  penulis_id String // Foreign Key
+
+  // Relasi: Satu berita punya banyak galeri
+  galeri GaleriBerita[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("berita")
+}
+
+// 3. Tabel Galeri Berita
+model GaleriBerita {
+  id          String  @id @default(uuid())
+  gambar_url  String
+  keterangan  String?
+
+  // Relasi: Galeri ini milik satu berita
+  berita    Berita @relation(fields: [berita_id], references: [id], onDelete: Cascade) // Jika berita dihapus, galeri ikut terhapus
+  berita_id String // Foreign Key
+
+  @@map("galeri_berita")
+}
+
+// 4. Tabel Info Perusahaan (Singleton)
+model InfoPerusahaan {
+  id                  Int    @id @default(1) // Hanya ada 1 baris
+  alamat_kantor       String @db.Text
+  no_hp               String
+  email               String
+  google_maps_embed String @db.Text
+
+  @@map("info_perusahaan")
+}
