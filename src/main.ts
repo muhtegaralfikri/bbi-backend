@@ -12,12 +12,19 @@ async function bootstrap() {
   await prismaService.enableShutdownHooks(app);
 
   // (Opsional) Mengaktifkan validasi DTO secara global
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true,
-    transform: true,
-   }));
-  
-  // Mengaktifkan CORS
-  app.enableCors();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
+
+  const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000';
+  // Mengaktifkan CORS untuk frontend
+  app.enableCors({
+    origin: frontendOrigin,
+    credentials: true,
+  });
 
   // Setup Swagger (Dokumentasi API)
   const config = new DocumentBuilder()
@@ -29,8 +36,11 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document); // Akses di /api/docs
 
-  await app.listen(process.env.PORT || 3000);
-  console.log(`Aplikasi berjalan di: ${await app.getUrl()}`);
-  console.log(`Dokumentasi API tersedia di: ${await app.getUrl()}/api/docs`);
+  const port = Number(process.env.PORT ?? 3001);
+  await app.listen(port);
+  const appUrl = await app.getUrl();
+  console.log(`Aplikasi berjalan di: ${appUrl}`);
+  console.log(`Dokumentasi API tersedia di: ${appUrl}/api/docs`);
+  console.log(`Frontend yang diizinkan mengakses: ${frontendOrigin}`);
 }
 bootstrap();
