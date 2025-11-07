@@ -3,9 +3,11 @@ import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common'; // Kita akan pakai ini nanti
+import { join } from 'path';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Mengaktifkan shutdown hooks untuk Prisma
   const prismaService = app.get(PrismaService);
@@ -25,6 +27,14 @@ async function bootstrap() {
     origin: frontendOrigin,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
+  });
+
+  const uploadsDir = process.env.UPLOADS_DIR
+    ? join(process.cwd(), process.env.UPLOADS_DIR)
+    : join(process.cwd(), 'uploads');
+
+  app.useStaticAssets(uploadsDir, {
+    prefix: '/uploads/',
   });
 
   // Setup Swagger (Dokumentasi API)

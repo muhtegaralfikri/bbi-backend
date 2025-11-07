@@ -1,20 +1,24 @@
 import { Module } from '@nestjs/common';
 import { UploadController } from './upload.controller';
 import { MulterModule } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 @Module({
   imports: [
     MulterModule.register({
-      // Konfigurasi storage (bisa juga S3, dll)
-      // Contoh simpan ke disk:
-      // storage: diskStorage({
-      //   destination: './public/uploads',
-      //   filename: (req, file, cb) => {
-      //     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-      //     cb(null, file.fieldname + '-' + uniqueSuffix + file.originalname);
-      //   }
-      // })
-      dest: './uploads', // Direktori sementara
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const fileExt = extname(file.originalname) || '';
+          cb(null, `${uniqueSuffix}${fileExt}`);
+        },
+      }),
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
     }),
   ],
   controllers: [UploadController],
