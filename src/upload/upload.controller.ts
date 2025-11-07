@@ -1,14 +1,16 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   UploadedFile,
   UseInterceptors,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-// import { diskStorage } from 'multer'; // Untuk menyimpan ke disk
+import { Request } from 'express';
 
 @ApiTags('Admin - CMS')
 @Controller('api/admin')
@@ -16,7 +18,7 @@ export class UploadController {
   @Post('upload-image')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiConsumes('multipart/form-data') // Menandakan ini adalah form data
+  @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
@@ -28,22 +30,27 @@ export class UploadController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file')) // 'file' adalah nama field
-  uploadImage(@UploadedFile() file: Express.Multer.File) {
-    
-    // --- PENTING ---
-    // Ini adalah placeholder. Di sini Anda perlu logika untuk:
-    // 1. Memvalidasi file (tipe, ukuran)
-    // 2. Menyimpan file (mis. ke S3, GCS, Cloudinary, atau static folder)
-    // 3. Mengembalikan URL publik dari file yang disimpan
-    
-    console.log(file);
-    
-    // Contoh respons (ganti dengan URL sebenarnya setelah di-upload)
-    // Jika disimpan lokal, Anda perlu setup static file server
-    return { 
+  @UseInterceptors(FileInterceptor('file'))
+  uploadImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File tidak ditemukan dalam permintaan');
+    }
+
+    if (!file.mimetype.startsWith('image/')) {
+      throw new BadRequestException('Hanya file gambar yang diperbolehkan');
+    }
+
+    const baseUrl =
+      process.env.APP_BASE_URL ??
+      `${req.protocol}://${req.get('host') ?? 'localhost:3001'}`;
+
+    return {
       message: 'File berhasil di-upload',
-      imageUrl: `/uploads/${file.filename}` 
+      imageUrl: `${baseUrl}/uploads/${file.filename}`,
+      filename: file.filename,
     };
   }
 }

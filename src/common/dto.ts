@@ -7,11 +7,12 @@ import {
   IsString,
   MinLength,
   IsNotEmpty,
-  IsUrl,
   IsOptional,
   IsIn,
   IsInt,
+  IsUrl,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 // --- Auth DTOs ---
 
@@ -78,9 +79,12 @@ export class CreateBeritaDto {
   @IsNotEmpty()
   isi_konten: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'URL gambar utama atau path relatif (misal /uploads/filename.jpg)',
+  })
   @IsString()
-  @IsUrl()
+  @IsNotEmpty()
   gambar_utama_url: string;
 
   @ApiProperty({ enum: ['draft', 'published'], required: false })
@@ -94,11 +98,13 @@ export class UpdateBeritaDto extends PartialType(CreateBeritaDto) {}
 export class PaginationQueryDto {
   @ApiProperty({ required: false, default: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   page?: number;
 
   @ApiProperty({ required: false, default: 10 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   limit?: number;
 }
