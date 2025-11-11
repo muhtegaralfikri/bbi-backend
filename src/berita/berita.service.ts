@@ -1,14 +1,21 @@
 import {
-  Injectable,
-  NotFoundException,
   ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateBeritaDto, UpdateBeritaDto } from 'src/common/dto';
+import { TranslationService } from 'src/common/translation.service';
 
 @Injectable()
 export class BeritaService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(BeritaService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private translationService: TranslationService,
+  ) {}
 
   // Fungsi utilitas pribadi untuk membuat slug
   private slugify(text: string): string {
@@ -28,6 +35,56 @@ export class BeritaService {
       .replace(/-+$/, ''); // Trim - dari akhir
   }
 
+  private async generateEnglishFields(content: {
+    judul: string;
+    ringkasan: string;
+    isi_konten: string;
+  }) {
+    const [judul_en, ringkasan_en, isi_konten_en] = await Promise.all([
+      this.translationService.translateText(content.judul, 'en'),
+      this.translationService.translateText(content.ringkasan, 'en'),
+      this.translationService.translateText(content.isi_konten, 'en', 'html'),
+    ]);
+
+    return { judul_en, ringkasan_en, isi_konten_en };
+  }
+
+  private async ensureEnglishFields<T extends any>(
+    berita: T & {
+      id: string;
+      status: string;
+      judul: string;
+      ringkasan: string;
+      isi_konten: string;
+      judul_en?: string | null;
+      ringkasan_en?: string | null;
+      isi_konten_en?: string | null;
+    },
+  ): Promise<T> {
+    if (
+      berita.status !== 'published' ||
+      (berita.judul_en && berita.ringkasan_en && berita.isi_konten_en)
+    ) {
+      return berita;
+    }
+
+    try {
+      const englishFields = await this.generateEnglishFields(berita);
+      await this.prisma.berita.update({
+        where: { id: berita.id },
+        data: englishFields,
+      });
+      return { ...berita, ...englishFields } as T;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown translation error';
+      this.logger.warn(
+        `Failed to update English fields for berita ${berita.id}: ${message}`,
+      );
+      return berita;
+    }
+  }
+
   // --- Rute Publik ---
   async findAllPublic(page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
@@ -42,8 +99,12 @@ export class BeritaService {
       this.prisma.berita.count({ where: { status: 'published' } }),
     ]);
 
+    const enriched = await Promise.all(
+      berita.map((item) => this.ensureEnglishFields(item)),
+    );
+
     return {
-      data: berita,
+      data: enriched,
       meta: {
         total,
         page,
@@ -64,15 +125,18 @@ export class BeritaService {
     if (!berita) {
       throw new NotFoundException('Berita tidak ditemukan');
     }
-    return berita;
+    return await this.ensureEnglishFields(berita);
   }
 
   // --- Rute Admin ---
   async findAllAdmin() {
-    return this.prisma.berita.findMany({
+    const items = await this.prisma.berita.findMany({
       orderBy: { created_at: 'desc' },
       include: { penulis: { select: { nama_lengkap: true } } },
     });
+    return await Promise.all(
+      items.map((item) => this.ensureEnglishFields(item)),
+    );
   }
 
   async findOneAdmin(id: string) {
@@ -80,7 +144,10 @@ export class BeritaService {
     if (!berita) {
       throw new NotFoundException('Berita tidak ditemukan');
     }
-    return berita;
+    if (berita.status !== 'published') {
+      return berita;
+    }
+    return await this.ensureEnglishFields(berita);
   }
 
   async create(dto: CreateBeritaDto, adminId: string) {
@@ -91,9 +158,15 @@ export class BeritaService {
       throw new ConflictException('Judul berita sudah ada, gunakan judul lain.');
     }
 
+    let englishFields = {};
+    if (dto.status === 'published') {
+      englishFields = await this.generateEnglishFields(dto);
+    }
+
     return this.prisma.berita.create({
       data: {
         ...dto,
+        ...englishFields,
         slug: slug,
         penulis_id: adminId,
         published_at: dto.status === 'published' ? new Date() : null,
@@ -102,19 +175,27 @@ export class BeritaService {
   }
 
   async update(id: string, dto: UpdateBeritaDto) {
+    const existing = await this.prisma.berita.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Berita tidak ditemukan');
+    }
+
     let slug: string | undefined = undefined;
     if (dto.judul) {
       slug = this.slugify(dto.judul);
-      const existing = await this.prisma.berita.findFirst({
+      const slugOwner = await this.prisma.berita.findFirst({
         where: { slug, NOT: { id } },
       });
-      if (existing) {
+      if (slugOwner) {
         throw new ConflictException('Judul berita sudah ada, gunakan judul lain.');
       }
     }
     
     // Siapkan data untuk update
-    const data: any = { ...dto, slug };
+    const data: any = { ...dto };
+    if (slug) {
+      data.slug = slug;
+    }
 
     // Logika untuk tanggal publikasi
     if (dto.status) {
@@ -125,6 +206,24 @@ export class BeritaService {
         // Jika diubah jadi draft, hapus tanggalnya
         data.published_at = null;
       }
+    }
+
+    const targetStatus = dto.status ?? existing.status;
+    const contentChanged = Boolean(
+      dto.judul ?? dto.ringkasan ?? dto.isi_konten,
+    );
+    const missingEnglish =
+      !existing.judul_en ||
+      !existing.ringkasan_en ||
+      !existing.isi_konten_en;
+
+    if (targetStatus === 'published' && (contentChanged || missingEnglish)) {
+      const englishFields = await this.generateEnglishFields({
+        judul: dto.judul ?? existing.judul,
+        ringkasan: dto.ringkasan ?? existing.ringkasan,
+        isi_konten: dto.isi_konten ?? existing.isi_konten,
+      });
+      Object.assign(data, englishFields);
     }
 
     try {

@@ -31,9 +31,12 @@ model Admin {
 model Berita {
   id               String   @id @default(uuid())
   judul            String
+  judul_en         String?
   slug             String   @unique
   ringkasan        String   @db.Text
+  ringkasan_en     String?  @db.Text
   isi_konten       String   @db.Text // Simpan sebagai HTML atau Markdown
+  isi_konten_en    String?  @db.Text
   gambar_utama_url String
   status           String   @default("draft") // "draft" atau "published"
   published_at     DateTime?
