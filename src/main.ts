@@ -33,9 +33,6 @@ async function bootstrap() {
     ? join(process.cwd(), process.env.UPLOADS_DIR)
     : join(process.cwd(), 'uploads');
 
-  app.useStaticAssets(uploadsDir, {
-    prefix: '/uploads/',
-  });
 
   // Setup Swagger (Dokumentasi API)
   const config = new DocumentBuilder()
