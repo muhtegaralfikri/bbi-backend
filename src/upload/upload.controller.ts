@@ -5,12 +5,12 @@ import {
   UploadedFile,
   UseInterceptors,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import cloudinary from 'src/config/cloudinary';
-import { UploadApiResponse } from 'cloudinary';
+import { Request } from 'express';
 
 @ApiTags('Admin - CMS')
 @Controller('api/admin')
@@ -31,7 +31,10 @@ export class UploadController {
     },
   })
   @UseInterceptors(FileInterceptor('file'))
-  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+  uploadImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: Request,
+  ) {
     if (!file) {
       throw new BadRequestException('File tidak ditemukan dalam permintaan');
     }
@@ -40,39 +43,14 @@ export class UploadController {
       throw new BadRequestException('Hanya file gambar yang diperbolehkan');
     }
 
-    if (!file.buffer) {
-      throw new BadRequestException(
-        'File buffer tidak tersedia, coba unggah ulang',
-      );
-    }
-
-    const folder = process.env.CLOUDINARY_FOLDER ?? 'bbi/uploads';
-
-    const result = await new Promise<UploadApiResponse>((resolve, reject) => {
-      const upload = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          resource_type: 'image',
-        },
-        (error, response) => {
-          if (error || !response) {
-            return reject(
-              new BadRequestException(
-                error?.message ?? 'Gagal mengunggah gambar ke Cloudinary',
-              ),
-            );
-          }
-          resolve(response);
-        },
-      );
-
-      upload.end(file.buffer);
-    });
+    const baseUrl =
+      process.env.APP_BASE_URL ??
+      `${req.protocol}://${req.get('host') ?? 'localhost:3001'}`;
 
     return {
       message: 'File berhasil di-upload',
-      imageUrl: result.secure_url,
-      filename: result.public_id,
+      imageUrl: `${baseUrl}/uploads/${file.filename}`,
+      filename: file.filename,
     };
   }
 }

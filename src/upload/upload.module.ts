@@ -1,12 +1,21 @@
 import { Module } from '@nestjs/common';
 import { UploadController } from './upload.controller';
 import { MulterModule } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 @Module({
   imports: [
     MulterModule.register({
-      storage: memoryStorage(),
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const fileExt = extname(file.originalname) || '';
+          cb(null, `${uniqueSuffix}${fileExt}`);
+        },
+      }),
       limits: {
         fileSize: 5 * 1024 * 1024, // 5MB
       },
