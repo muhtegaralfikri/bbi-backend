@@ -21,10 +21,20 @@ async function bootstrap() {
     }),
   );
 
-  const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000';
+  const frontendOriginEnv =
+    process.env.FRONTEND_ORIGINS ??
+    process.env.FRONTEND_ORIGIN ??
+    'http://localhost:3000';
+
+  const allowedOrigins = frontendOriginEnv
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  const corsOrigin = allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins;
   // Mengaktifkan CORS untuk frontend
   app.enableCors({
-    origin: frontendOrigin,
+    origin: corsOrigin,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -49,6 +59,8 @@ async function bootstrap() {
   const appUrl = await app.getUrl();
   console.log(`Aplikasi berjalan di: ${appUrl}`);
   console.log(`Dokumentasi API tersedia di: ${appUrl}/api/docs`);
-  console.log(`Frontend yang diizinkan mengakses: ${frontendOrigin}`);
+  console.log(
+    `Frontend yang diizinkan mengakses: ${Array.isArray(corsOrigin) ? corsOrigin.join(', ') : corsOrigin}`,
+  );
 }
 bootstrap();
