@@ -6,16 +6,15 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateBeritaDto, UpdateBeritaDto } from 'src/common/dto';
-import { TranslationService } from 'src/common/translation.service';
+const ENGLISH_FIELDS = ['judul_en', 'ringkasan_en', 'isi_konten_en'] as const;
+type EnglishFieldKey = (typeof ENGLISH_FIELDS)[number];
+type EnglishFieldMap = Partial<Record<EnglishFieldKey, string | null>>;
 
 @Injectable()
 export class BeritaService {
   private readonly logger = new Logger(BeritaService.name);
 
-  constructor(
-    private prisma: PrismaService,
-    private translationService: TranslationService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   // Fungsi utilitas pribadi untuk membuat slug
   private slugify(text: string): string {
@@ -35,55 +34,24 @@ export class BeritaService {
       .replace(/-+$/, ''); // Trim - dari akhir
   }
 
-  private async generateEnglishFields(content: {
-    judul: string;
-    ringkasan: string;
-    isi_konten: string;
-  }) {
-    const [judul_en, ringkasan_en, isi_konten_en] = await Promise.all([
-      this.translationService.translateText(content.judul, 'en'),
-      this.translationService.translateText(content.ringkasan, 'en'),
-      this.translationService.translateText(content.isi_konten, 'en', 'html'),
-    ]);
-
-    return { judul_en, ringkasan_en, isi_konten_en };
+  private extractEnglishFields(
+    dto: Partial<Record<EnglishFieldKey, string | null | undefined>>,
+  ): EnglishFieldMap {
+    const result: EnglishFieldMap = {};
+    for (const field of ENGLISH_FIELDS) {
+      if (dto[field] !== undefined) {
+        const raw = dto[field];
+        if (typeof raw === 'string') {
+          const trimmed = raw.trim();
+          result[field] = trimmed.length > 0 ? trimmed : null;
+        } else {
+          result[field] = raw ?? null;
+        }
+      }
+    }
+    return result;
   }
 
-  private async ensureEnglishFields<T extends any>(
-    berita: T & {
-      id: string;
-      status: string;
-      judul: string;
-      ringkasan: string;
-      isi_konten: string;
-      judul_en?: string | null;
-      ringkasan_en?: string | null;
-      isi_konten_en?: string | null;
-    },
-  ): Promise<T> {
-    if (
-      berita.status !== 'published' ||
-      (berita.judul_en && berita.ringkasan_en && berita.isi_konten_en)
-    ) {
-      return berita;
-    }
-
-    try {
-      const englishFields = await this.generateEnglishFields(berita);
-      await this.prisma.berita.update({
-        where: { id: berita.id },
-        data: englishFields,
-      });
-      return { ...berita, ...englishFields } as T;
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown translation error';
-      this.logger.warn(
-        `Failed to update English fields for berita ${berita.id}: ${message}`,
-      );
-      return berita;
-    }
-  }
 
   // --- Rute Publik ---
   async findAllPublic(page: number = 1, limit: number = 10) {
@@ -99,12 +67,8 @@ export class BeritaService {
       this.prisma.berita.count({ where: { status: 'published' } }),
     ]);
 
-    const enriched = await Promise.all(
-      berita.map((item) => this.ensureEnglishFields(item)),
-    );
-
     return {
-      data: enriched,
+      data: berita,
       meta: {
         total,
         page,
@@ -125,18 +89,15 @@ export class BeritaService {
     if (!berita) {
       throw new NotFoundException('Berita tidak ditemukan');
     }
-    return await this.ensureEnglishFields(berita);
+    return berita;
   }
 
   // --- Rute Admin ---
   async findAllAdmin() {
-    const items = await this.prisma.berita.findMany({
+    return await this.prisma.berita.findMany({
       orderBy: { created_at: 'desc' },
       include: { penulis: { select: { nama_lengkap: true } } },
     });
-    return await Promise.all(
-      items.map((item) => this.ensureEnglishFields(item)),
-    );
   }
 
   async findOneAdmin(id: string) {
@@ -144,10 +105,7 @@ export class BeritaService {
     if (!berita) {
       throw new NotFoundException('Berita tidak ditemukan');
     }
-    if (berita.status !== 'published') {
-      return berita;
-    }
-    return await this.ensureEnglishFields(berita);
+    return berita;
   }
 
   async create(dto: CreateBeritaDto, adminId: string) {
@@ -158,15 +116,18 @@ export class BeritaService {
       throw new ConflictException('Judul berita sudah ada, gunakan judul lain.');
     }
 
-    let englishFields = {};
-    if (dto.status === 'published') {
-      englishFields = await this.generateEnglishFields(dto);
-    }
+    const manualEnglish = this.extractEnglishFields(dto);
+    const {
+      judul_en: _judulEn,
+      ringkasan_en: _ringkasanEn,
+      isi_konten_en: _isiKontenEn,
+      ...baseData
+    } = dto;
 
     return this.prisma.berita.create({
       data: {
-        ...dto,
-        ...englishFields,
+        ...baseData,
+        ...manualEnglish,
         slug: slug,
         penulis_id: adminId,
         published_at: dto.status === 'published' ? new Date() : null,
@@ -191,8 +152,13 @@ export class BeritaService {
       }
     }
     
-    // Siapkan data untuk update
-    const data: any = { ...dto };
+    const { judul_en, ringkasan_en, isi_konten_en, ...restDto } = dto;
+    const manualEnglish = this.extractEnglishFields({
+      judul_en,
+      ringkasan_en,
+      isi_konten_en,
+    });
+    const data: any = { ...restDto, ...manualEnglish };
     if (slug) {
       data.slug = slug;
     }
@@ -206,24 +172,6 @@ export class BeritaService {
         // Jika diubah jadi draft, hapus tanggalnya
         data.published_at = null;
       }
-    }
-
-    const targetStatus = dto.status ?? existing.status;
-    const contentChanged = Boolean(
-      dto.judul ?? dto.ringkasan ?? dto.isi_konten,
-    );
-    const missingEnglish =
-      !existing.judul_en ||
-      !existing.ringkasan_en ||
-      !existing.isi_konten_en;
-
-    if (targetStatus === 'published' && (contentChanged || missingEnglish)) {
-      const englishFields = await this.generateEnglishFields({
-        judul: dto.judul ?? existing.judul,
-        ringkasan: dto.ringkasan ?? existing.ringkasan,
-        isi_konten: dto.isi_konten ?? existing.isi_konten,
-      });
-      Object.assign(data, englishFields);
     }
 
     try {
