@@ -79,6 +79,21 @@ export class CreateBeritaDto {
   @IsNotEmpty()
   isi_konten: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  judul_en?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  ringkasan_en?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  isi_konten_en?: string;
+
   @ApiProperty({
     description:
       'URL gambar utama atau path relatif (misal /uploads/filename.jpg)',
