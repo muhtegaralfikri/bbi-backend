@@ -1,14 +1,20 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateBeritaDto, UpdateBeritaDto } from 'src/common/dto';
+import {
+  CreateBeritaDto,
+  UpdateBeritaDto,
+  CreateKomentarDto,
+} from 'src/common/dto';
 const ENGLISH_FIELDS = ['judul_en', 'ringkasan_en', 'isi_konten_en'] as const;
 type EnglishFieldKey = (typeof ENGLISH_FIELDS)[number];
 type EnglishFieldMap = Partial<Record<EnglishFieldKey, string | null>>;
+type KomentarStatus = 'pending' | 'approved' | 'rejected';
 
 @Injectable()
 export class BeritaService {
@@ -52,6 +58,17 @@ export class BeritaService {
     return result;
   }
 
+  private async getPublishedBeritaOrThrow(slug: string) {
+    const berita = await this.prisma.berita.findFirst({
+      where: { slug, status: 'published' },
+      select: { id: true },
+    });
+    if (!berita) {
+      throw new NotFoundException('Berita tidak ditemukan');
+    }
+    return berita;
+  }
+
 
   // --- Rute Publik ---
   async findAllPublic(page: number = 1, limit: number = 10) {
@@ -84,6 +101,16 @@ export class BeritaService {
       include: {
         penulis: { select: { nama_lengkap: true } },
         galeri: true, // Sertakan galeri berita
+        komentar: {
+          where: { status: 'approved' },
+          orderBy: { created_at: 'asc' },
+          select: {
+            id: true,
+            nama: true,
+            isi: true,
+            created_at: true,
+          },
+        },
       },
     });
     if (!berita) {
@@ -181,6 +208,68 @@ export class BeritaService {
       });
     } catch (error) {
       throw new NotFoundException('Berita tidak ditemukan');
+    }
+  }
+
+  async getKomentarPublik(slug: string) {
+    const berita = await this.getPublishedBeritaOrThrow(slug);
+    return this.prisma.komentarBerita.findMany({
+      where: { berita_id: berita.id, status: 'approved' },
+      orderBy: { created_at: 'asc' },
+      select: {
+        id: true,
+        nama: true,
+        isi: true,
+        created_at: true,
+      },
+    });
+  }
+
+  async createKomentar(slug: string, dto: CreateKomentarDto) {
+    const berita = await this.getPublishedBeritaOrThrow(slug);
+    const nama = dto.nama.trim();
+    const isi = dto.isi.trim();
+    if (!nama || !isi) {
+      throw new BadRequestException('Nama dan komentar wajib diisi.');
+    }
+    return this.prisma.komentarBerita.create({
+      data: {
+        berita_id: berita.id,
+        nama,
+        email: dto.email.trim().toLowerCase(),
+        isi,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+  }
+
+  async findKomentarAdmin(status?: KomentarStatus) {
+    return this.prisma.komentarBerita.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { created_at: 'desc' },
+      include: {
+        berita: { select: { id: true, judul: true, slug: true } },
+      },
+    });
+  }
+
+  async updateKomentarStatus(id: string, status: KomentarStatus) {
+    try {
+      return await this.prisma.komentarBerita.update({
+        where: { id },
+        data: {
+          status,
+          approved_at: status === 'approved' ? new Date() : null,
+        },
+        include: {
+          berita: { select: { id: true, judul: true, slug: true } },
+        },
+      });
+    } catch (error) {
+      throw new NotFoundException('Komentar tidak ditemukan');
     }
   }
 
