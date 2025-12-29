@@ -182,3 +182,29 @@ export class UpdateKomentarStatusDto {
   @IsIn(['pending', 'approved', 'rejected'])
   status: 'pending' | 'approved' | 'rejected';
 }
+
+// --- Info Cabang DTOs ---
+
+export class CreateCabangDto {
+  @ApiProperty({ description: 'Nama kantor cabang' })
+  @IsString()
+  @IsNotEmpty()
+  nama_cabang: string;
+
+  @ApiProperty({ description: 'Alamat lengkap kantor cabang' })
+  @IsString()
+  @IsNotEmpty()
+  alamat: string;
+
+  @ApiProperty({ description: 'Nomor telepon/WhatsApp cabang', required: false })
+  @IsOptional()
+  @IsString()
+  no_telepon?: string;
+
+  @ApiProperty({ description: 'Kode embed iframe Google Maps' })
+  @IsString()
+  @IsNotEmpty()
+  google_maps_embed: string;
+}
+
+export class UpdateCabangDto extends PartialType(CreateCabangDto) {}

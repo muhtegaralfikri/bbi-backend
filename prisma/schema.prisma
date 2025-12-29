@@ -96,3 +96,16 @@ model KomentarBerita {
 
   @@map("komentar_berita")
 }
+
+// 6. Tabel Info Cabang
+model InfoCabang {
+  id                String   @id @default(uuid())
+  nama_cabang       String
+  alamat            String   @db.Text
+  no_telepon        String?
+  google_maps_embed String   @db.Text
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@map("info_cabang")
+}
