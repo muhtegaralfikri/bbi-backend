@@ -194,7 +194,7 @@ export class BeritaService {
       ...baseData
     } = dto;
 
-    const result = this.prisma.berita.create({
+    const result = await this.prisma.berita.create({
       data: {
         ...baseData,
         ...manualEnglish,
