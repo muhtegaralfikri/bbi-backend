@@ -54,6 +54,9 @@ model Berita {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@index([status, published_at(sort: Desc)])
+  @@index([slug])
+  @@index([status])
   @@map("berita")
 }
 
@@ -94,6 +97,8 @@ model KomentarBerita {
   berita    Berita @relation(fields: [berita_id], references: [id], onDelete: Cascade)
   berita_id String
 
+  @@index([status, created_at(sort: Desc)])
+  @@index([berita_id])
   @@map("komentar_berita")
 }
 
