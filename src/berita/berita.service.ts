@@ -79,8 +79,10 @@ export class BeritaService {
     if (slug) {
       await this.cacheManager.del(`berita:public:${slug}`);
     }
-    // Note: In production with cache-manager, use Redis for better cache invalidation
-    // For now, we rely on TTL to expire old cache entries
+    // Hapus cache list halaman pertama yang umum diakses
+    await this.cacheManager.del('berita:public:1:3'); // Beranda
+    await this.cacheManager.del('berita:public:1:9'); // Halaman berita default
+    await this.cacheManager.del('berita:public:1:10'); // Default limit
   }
 
   // --- Rute Publik ---
@@ -125,7 +127,8 @@ export class BeritaService {
       },
     };
 
-    await this.cacheManager.set(cacheKey, result, 300);
+    // TTL dikurangi jadi 30 detik agar update lebih cepat terasa jika invalidation gagal
+    await this.cacheManager.set(cacheKey, result, 30 * 1000); 
     return result;
   }
 
