@@ -3,7 +3,7 @@ module.exports = {
   apps: [
     {
       name: 'bbi-backend',
-      script: './dist/main.js',
+      script: './dist/src/main.js',
       instances: 'max', // Use all available CPU cores
       exec_mode: 'cluster', // Cluster mode for better performance
 
