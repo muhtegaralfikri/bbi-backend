@@ -1,13 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { CACHE_MANAGER, Inject } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
   CreateBeritaDto,
@@ -37,13 +36,13 @@ export class BeritaService {
     return text
       .toString()
       .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(p, (c) => b.charAt(a.indexOf(c)))
-      .replace(/&/g, '-and-')
-      .replace(/[^\w\-]+/g, '')
-      .replace(/\-\-+/g, '-')
-      .replace(/^-+/, '')
-      .replace(/-+$/, '');
+      .replace(/\s+/g, '-') // Ganti spasi dengan -
+      .replace(p, (c) => b.charAt(a.indexOf(c))) // Ganti karakter spesial
+      .replace(/&/g, '-and-') // Ganti & dengan 'and'
+      .replace(/[^\w\-]+/g, '') // Hapus karakter non-word
+      .replace(/\-\-+/g, '-') // Ganti -- dengan -
+      .replace(/^-+/, '') // Trim - dari awal
+      .replace(/-+$/, ''); // Trim - dari akhir
   }
 
   private extractEnglishFields(
@@ -75,47 +74,22 @@ export class BeritaService {
     return berita;
   }
 
-  private async invalidateCache(slug?: string) {
-    if (slug) {
-      await this.cacheManager.del(`berita:public:${slug}`);
-    }
-    // Note: In production with cache-manager, use Redis for better cache invalidation
-    // For now, we rely on TTL to expire old cache entries
-  }
 
   // --- Rute Publik ---
   async findAllPublic(page: number = 1, limit: number = 10) {
-    const cacheKey = `berita:public:${page}:${limit}`;
-
-    const cached = await this.cacheManager.get(cacheKey);
-    if (cached) {
-      this.logger.debug(`Cache hit: ${cacheKey}`);
-      return cached;
-    }
-
     const skip = (page - 1) * limit;
     const [berita, total] = await this.prisma.$transaction([
       this.prisma.berita.findMany({
         where: { status: 'published' },
-        select: {
-          id: true,
-          judul: true,
-          judul_en: true,
-          slug: true,
-          ringkasan: true,
-          ringkasan_en: true,
-          gambar_utama_url: true,
-          published_at: true,
-          penulis: { select: { nama_lengkap: true } },
-        },
         skip,
         take: limit,
         orderBy: { published_at: 'desc' },
+        include: { penulis: { select: { nama_lengkap: true } } },
       }),
       this.prisma.berita.count({ where: { status: 'published' } }),
     ]);
 
-    const result = {
+    return {
       data: berita,
       meta: {
         total,
@@ -124,25 +98,14 @@ export class BeritaService {
         lastPage: Math.ceil(total / limit),
       },
     };
-
-    await this.cacheManager.set(cacheKey, result, 300);
-    return result;
   }
 
   async findOnePublic(slug: string) {
-    const cacheKey = `berita:public:${slug}`;
-
-    const cached = await this.cacheManager.get(cacheKey);
-    if (cached) {
-      this.logger.debug(`Cache hit: ${cacheKey}`);
-      return cached;
-    }
-
     const berita = await this.prisma.berita.findUnique({
       where: { slug, status: 'published' },
       include: {
         penulis: { select: { nama_lengkap: true } },
-        galeri: true,
+        galeri: true, // Sertakan galeri berita
         komentar: {
           where: { status: 'approved' },
           orderBy: { created_at: 'asc' },
@@ -158,8 +121,6 @@ export class BeritaService {
     if (!berita) {
       throw new NotFoundException('Berita tidak ditemukan');
     }
-
-    await this.cacheManager.set(cacheKey, berita, 300);
     return berita;
   }
 
@@ -181,6 +142,7 @@ export class BeritaService {
 
   async create(dto: CreateBeritaDto, adminId: string) {
     const slug = this.slugify(dto.judul);
+    // Cek duplikat slug
     const existing = await this.prisma.berita.findUnique({ where: { slug } });
     if (existing) {
       throw new ConflictException('Judul berita sudah ada, gunakan judul lain.');
@@ -194,7 +156,7 @@ export class BeritaService {
       ...baseData
     } = dto;
 
-    const result = await this.prisma.berita.create({
+    return this.prisma.berita.create({
       data: {
         ...baseData,
         ...manualEnglish,
@@ -203,9 +165,6 @@ export class BeritaService {
         published_at: dto.status === 'published' ? new Date() : null,
       },
     });
-
-    await this.invalidateCache();
-    return result;
   }
 
   async update(id: string, dto: UpdateBeritaDto) {
@@ -224,7 +183,7 @@ export class BeritaService {
         throw new ConflictException('Judul berita sudah ada, gunakan judul lain.');
       }
     }
-
+    
     const { judul_en, ringkasan_en, isi_konten_en, ...restDto } = dto;
     const manualEnglish = this.extractEnglishFields({
       judul_en,
@@ -236,22 +195,22 @@ export class BeritaService {
       data.slug = slug;
     }
 
+    // Logika untuk tanggal publikasi
     if (dto.status) {
       if (dto.status === 'published') {
+        // Jika diubah jadi published, set tanggalnya
         data.published_at = new Date();
       } else if (dto.status === 'draft') {
+        // Jika diubah jadi draft, hapus tanggalnya
         data.published_at = null;
       }
     }
 
     try {
-      const result = await this.prisma.berita.update({
+      return await this.prisma.berita.update({
         where: { id },
         data,
       });
-      await this.invalidateCache(existing.slug);
-      await this.invalidateCache(slug);
-      return result;
     } catch (error) {
       throw new NotFoundException('Berita tidak ditemukan');
     }
@@ -278,7 +237,7 @@ export class BeritaService {
     if (!nama || !isi) {
       throw new BadRequestException('Nama dan komentar wajib diisi.');
     }
-    const result = await this.prisma.komentarBerita.create({
+    return this.prisma.komentarBerita.create({
       data: {
         berita_id: berita.id,
         nama,
@@ -290,11 +249,6 @@ export class BeritaService {
         status: true,
       },
     });
-
-    // Invalidate cache for consistency
-    await this.invalidateCache(slug);
-
-    return result;
   }
 
   async findKomentarAdmin(status?: KomentarStatus) {
@@ -309,7 +263,7 @@ export class BeritaService {
 
   async updateKomentarStatus(id: string, status: KomentarStatus) {
     try {
-      const result = await this.prisma.komentarBerita.update({
+      return await this.prisma.komentarBerita.update({
         where: { id },
         data: {
           status,
@@ -319,11 +273,6 @@ export class BeritaService {
           berita: { select: { id: true, judul: true, slug: true } },
         },
       });
-
-      // Invalidate cache for the news article so approved comments appear
-      await this.invalidateCache(result.berita.slug);
-
-      return result;
     } catch (error) {
       throw new NotFoundException('Komentar tidak ditemukan');
     }
@@ -331,9 +280,8 @@ export class BeritaService {
 
   async remove(id: string) {
     try {
-      const existing = await this.prisma.berita.findUnique({ where: { id } });
-      await this.prisma.berita.delete({ where: { id } });
-      await this.invalidateCache(existing?.slug);
+      // GaleriBerita akan terhapus otomatis karena `onDelete: Cascade`
+      return await this.prisma.berita.delete({ where: { id } });
     } catch (error) {
       throw new NotFoundException('Berita tidak ditemukan');
     }

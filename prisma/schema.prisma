@@ -46,11 +46,17 @@ model Berita {
   penulis_id String // Foreign Key
 
   // Relasi: Satu berita punya banyak galeri
-  galeri GaleriBerita[]
+  galeri   GaleriBerita[]
+
+  // Relasi: Satu berita punya banyak komentar
+  komentar KomentarBerita[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@index([status, published_at(sort: Desc)])
+  @@index([slug])
+  @@index([status])
   @@map("berita")
 }
 
@@ -76,4 +82,35 @@ model InfoPerusahaan {
   google_maps_embed String @db.Text
 
   @@map("info_perusahaan")
+}
+
+// 5. Tabel Komentar Berita Publik
+model KomentarBerita {
+  id          String   @id @default(uuid())
+  nama        String
+  email       String
+  isi         String   @db.Text
+  status      String   @default("pending") // pending | approved | rejected
+  created_at  DateTime @default(now())
+  approved_at DateTime?
+
+  berita    Berita @relation(fields: [berita_id], references: [id], onDelete: Cascade)
+  berita_id String
+
+  @@index([status, created_at(sort: Desc)])
+  @@index([berita_id])
+  @@map("komentar_berita")
+}
+
+// 6. Tabel Info Cabang
+model InfoCabang {
+  id                String   @id @default(uuid())
+  nama_cabang       String
+  alamat            String   @db.Text
+  no_telepon        String?
+  google_maps_embed String   @db.Text
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@map("info_cabang")
 }

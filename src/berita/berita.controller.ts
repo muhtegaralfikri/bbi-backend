@@ -18,6 +18,9 @@ import {
   CreateBeritaDto,
   UpdateBeritaDto,
   PaginationQueryDto,
+  CreateKomentarDto,
+  KomentarStatusQueryDto,
+  UpdateKomentarStatusDto,
 } from 'src/common/dto';
 
 @Controller('api')
@@ -45,6 +48,24 @@ export class BeritaController {
   @Get('berita/:slug')
   findOnePublic(@Param('slug') slug: string) {
     return this.beritaService.findOnePublic(slug);
+  }
+
+  @ApiTags('Publik - Komentar Berita')
+  @Get('berita/:slug/komentar')
+  findKomentarPublic(@Param('slug') slug: string) {
+    return this.beritaService.getKomentarPublik(slug);
+  }
+
+  @ApiTags('Publik - Komentar Berita')
+  @Post('berita/:slug/komentar')
+  async createKomentar(
+    @Param('slug') slug: string,
+    @Body() createKomentar: CreateKomentarDto,
+  ) {
+    await this.beritaService.createKomentar(slug, createKomentar);
+    return {
+      message: 'Komentar berhasil dikirim dan menunggu persetujuan admin.',
+    };
   }
 
   /*
@@ -95,5 +116,24 @@ export class BeritaController {
   @Delete('admin/berita/:id')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.beritaService.remove(id);
+  }
+
+  @ApiTags('Admin - Komentar')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('admin/komentar')
+  findAllKomentarAdmin(@Query() query: KomentarStatusQueryDto) {
+    return this.beritaService.findKomentarAdmin(query.status);
+  }
+
+  @ApiTags('Admin - Komentar')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Put('admin/komentar/:id/status')
+  updateKomentarStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateKomentarStatusDto,
+  ) {
+    return this.beritaService.updateKomentarStatus(id, body.status);
   }
 }

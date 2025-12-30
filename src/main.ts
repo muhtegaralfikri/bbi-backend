@@ -2,22 +2,33 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common'; // Kita akan pakai ini nanti
+import { ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Compression untuk mengurangi size response
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) return false;
+      return (compression as any).filter(req, res);
+    },
+    threshold: 1024,
+  }));
 
   // Mengaktifkan shutdown hooks untuk Prisma
   const prismaService = app.get(PrismaService);
   await prismaService.enableShutdownHooks(app);
 
-  // (Opsional) Mengaktifkan validasi DTO secara global
+  // Validasi DTO secara global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
+      disableErrorMessages: process.env.NODE_ENV === 'production',
     }),
   );
 

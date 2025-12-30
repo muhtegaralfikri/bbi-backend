@@ -10,7 +10,6 @@ import {
   IsOptional,
   IsIn,
   IsInt,
-  IsUrl,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -147,3 +146,65 @@ export class UpdateKontakDto {
   @IsNotEmpty()
   google_maps_embed: string;
 }
+
+// --- Komentar DTOs ---
+
+export class CreateKomentarDto {
+  @ApiProperty({ description: 'Nama yang ditampilkan bersama komentar' })
+  @IsString()
+  @IsNotEmpty()
+  nama: string;
+
+  @ApiProperty({ description: 'Email pengirim untuk keperluan moderasi' })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ description: 'Isi komentar publik' })
+  @IsString()
+  @IsNotEmpty()
+  isi: string;
+}
+
+export class KomentarStatusQueryDto {
+  @ApiProperty({
+    required: false,
+    enum: ['pending', 'approved', 'rejected'],
+    description: 'Filter komentar berdasarkan status',
+  })
+  @IsOptional()
+  @IsIn(['pending', 'approved', 'rejected'])
+  status?: 'pending' | 'approved' | 'rejected';
+}
+
+export class UpdateKomentarStatusDto {
+  @ApiProperty({ enum: ['pending', 'approved', 'rejected'] })
+  @IsString()
+  @IsIn(['pending', 'approved', 'rejected'])
+  status: 'pending' | 'approved' | 'rejected';
+}
+
+// --- Info Cabang DTOs ---
+
+export class CreateCabangDto {
+  @ApiProperty({ description: 'Nama kantor cabang' })
+  @IsString()
+  @IsNotEmpty()
+  nama_cabang: string;
+
+  @ApiProperty({ description: 'Alamat lengkap kantor cabang' })
+  @IsString()
+  @IsNotEmpty()
+  alamat: string;
+
+  @ApiProperty({ description: 'Nomor telepon/WhatsApp cabang', required: false })
+  @IsOptional()
+  @IsString()
+  no_telepon?: string;
+
+  @ApiProperty({ description: 'Kode embed iframe Google Maps' })
+  @IsString()
+  @IsNotEmpty()
+  google_maps_embed: string;
+}
+
+export class UpdateCabangDto extends PartialType(CreateCabangDto) {}
