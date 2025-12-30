@@ -278,7 +278,7 @@ export class BeritaService {
     if (!nama || !isi) {
       throw new BadRequestException('Nama dan komentar wajib diisi.');
     }
-    return this.prisma.komentarBerita.create({
+    const result = await this.prisma.komentarBerita.create({
       data: {
         berita_id: berita.id,
         nama,
@@ -290,6 +290,11 @@ export class BeritaService {
         status: true,
       },
     });
+
+    // Invalidate cache for consistency
+    await this.invalidateCache(slug);
+
+    return result;
   }
 
   async findKomentarAdmin(status?: KomentarStatus) {
@@ -304,7 +309,7 @@ export class BeritaService {
 
   async updateKomentarStatus(id: string, status: KomentarStatus) {
     try {
-      return await this.prisma.komentarBerita.update({
+      const result = await this.prisma.komentarBerita.update({
         where: { id },
         data: {
           status,
@@ -314,6 +319,11 @@ export class BeritaService {
           berita: { select: { id: true, judul: true, slug: true } },
         },
       });
+
+      // Invalidate cache for the news article so approved comments appear
+      await this.invalidateCache(result.berita.slug);
+
+      return result;
     } catch (error) {
       throw new NotFoundException('Komentar tidak ditemukan');
     }
